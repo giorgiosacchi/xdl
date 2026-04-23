@@ -1,0 +1,2009 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>XDL Bridge — formati multipli ↔ XDL</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/sql-wasm.js"></script>
+  <style>
+    :root{
+      --bg:#f4f7fb; --card:#fff; --ink:#132238; --muted:#5b6a80; --accent:#2f6fed;
+      --accent2:#ebf2ff; --border:#d8e0ef; --good:#0b7a4b; --warn:#9b6400; --bad:#a11d2d;
+      --shadow:0 12px 30px rgba(18,34,58,.08); --radius:18px;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:"Segoe UI",Roboto,Arial,sans-serif;background:linear-gradient(180deg,#eef4ff 0%,#f7f9fc 100%);color:var(--ink)}
+    .wrap{max-width:1320px;margin:0 auto;padding:24px 16px 42px}
+    .hero{background:linear-gradient(135deg,#2f6fed 0%,#6396ff 100%);color:#fff;border-radius:28px;padding:28px;box-shadow:var(--shadow);margin-bottom:18px}
+    .hero h1{margin:0 0 10px;font-size:clamp(1.65rem,2.8vw,2.5rem);line-height:1.1}
+    .hero p{margin:0;line-height:1.55;max-width:1040px;opacity:.97}
+    .grid{display:grid;grid-template-columns:1.05fr .95fr;gap:18px}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px}
+    h2{margin:0 0 12px;font-size:1.25rem}
+    h3{margin:18px 0 8px;font-size:1rem;color:#23406b}
+    .sub{color:var(--muted);line-height:1.5;font-size:.95rem;margin-bottom:14px}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+    .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px}
+    .field{display:flex;flex-direction:column;gap:6px}
+    label{font-weight:700;font-size:.92rem;color:#203352}
+    input[type="text"], select, textarea{width:100%;border:1px solid var(--border);border-radius:12px;padding:11px 12px;font-size:.95rem;color:var(--ink);background:#fff;outline:none}
+    input[type="file"]{width:100%;border:1px dashed #aab7cf;border-radius:12px;padding:10px 12px;background:#fbfcff}
+    textarea{min-height:380px;resize:vertical;font-family:Consolas,"Courier New",monospace;line-height:1.45}
+    .btnbar{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}
+    button{appearance:none;border:0;border-radius:12px;padding:11px 16px;font-weight:700;font-size:.95rem;cursor:pointer;transition:transform .08s ease,opacity .2s ease;box-shadow:0 4px 12px rgba(47,111,237,.16)}
+    button:hover{transform:translateY(-1px)}
+    .primary{background:var(--accent);color:#fff}
+    .soft{background:var(--accent2);color:#1a4cae;box-shadow:none}
+    .ghost{background:#f3f6fb;color:#274161;box-shadow:none}
+    .ok{background:#e7f7ef;color:var(--good);box-shadow:none}
+    .warn{background:#fff4e4;color:var(--warn);box-shadow:none}
+    .pill{display:inline-block;background:#eff4ff;color:#2b58b7;border:1px solid #dce7ff;padding:5px 10px;border-radius:999px;font-size:.84rem;font-weight:700;margin:0 8px 8px 0}
+    .status{margin-top:12px;border-radius:14px;padding:11px 12px;background:#f7faff;border:1px solid #dbe6fb;color:#24406d;min-height:56px;line-height:1.45;white-space:pre-wrap}
+    .mini{font-size:.88rem;color:var(--muted);line-height:1.45}
+    .box{background:#f8fbff;border:1px solid #e0e8f8;border-radius:14px;padding:12px}
+    .preview{max-height:280px;overflow:auto;white-space:pre-wrap;font-family:Consolas,monospace;font-size:.9rem;background:#fbfdff;border:1px solid #e3ebfa;border-radius:12px;padding:12px}
+    .summary li{margin-bottom:5px}
+    @media (max-width: 980px){.grid{grid-template-columns:1fr}}
+    @media (max-width: 720px){.row,.row3{grid-template-columns:1fr}.hero{padding:22px 18px}.card{padding:16px}textarea{min-height:300px}}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <section class="hero">
+    <h1>XDL Bridge — formati multipli ↔ XDL</h1>
+    <p>
+      Questa pagina usa <strong>XDL</strong> come linguaggio intermedio unificato. Puoi caricare file <strong>Word (.docx)</strong>,
+      <strong>Excel (.xlsx, .xls, .ods)</strong>, <strong>PowerPoint (.pptx)</strong>, <strong>PDF</strong>, <strong>JSON</strong>, <strong>XML</strong>,
+      <strong>database SQLite / SQL</strong>, <strong>messaggi clinici HL7/FHIR</strong> oppure un file <strong>XDL (.xdl o .txt)</strong>.
+      Il sistema genera e mostra l’XDL a video e poi ti permette di ricostruirlo nel formato di destinazione scelto.
+      I campi dell’interfaccia compaiono solo quando servono davvero in base al formato selezionato.
+    </p>
+  </section>
+
+  <div class="grid">
+    <section class="card">
+      <h2>1. Sorgente e conversione intermedia</h2>
+      <div class="sub">Scegli il file di input. I campi specifici compaiono solo quando sono pertinenti al tipo di file selezionato. Per Excel puoi indicare foglio e intervallo; per gli altri formati vedi solo le opzioni realmente utili.</div>
+
+      <div class="field">
+        <label for="sourceFile">File sorgente</label>
+        <input id="sourceFile" type="file" accept=".xlsx,.xls,.xlsm,.ods,.docx,.pptx,.xdl,.txt,.json,.xml,.pdf,.sqlite,.db,.sql,.hl7" />
+      </div>
+      <div class="box mini" id="sourceInfo" style="margin:10px 0 12px;">Nessun file sorgente selezionato.</div>
+
+      <div class="row3">
+        <div class="field">
+          <label for="sourceType">Tipo sorgente</label>
+          <select id="sourceType">
+            <option value="auto">Rilevamento automatico</option>
+            <option value="spreadsheet">Excel / foglio elettronico</option>
+            <option value="text">Word / documento testuale</option>
+            <option value="presentation">PowerPoint / presentazione</option>
+            <option value="xdl">XDL</option>
+            <option value="json">JSON</option>
+            <option value="xml">XML</option>
+            <option value="pdf">PDF</option>
+            <option value="database">Database / SQLite / SQL</option>
+            <option value="clinical">Messaggi clinici (HL7 / FHIR)</option>
+          </select>
+        </div>
+        <div class="field source-only source-spreadsheet" id="sheetNameWrap" style="display:none;">
+          <label for="sheetName">Foglio Excel</label>
+          <input id="sheetName" type="text" placeholder="Es. Foglio1" />
+        </div>
+        <div class="field source-only source-spreadsheet" id="rangeInputWrap" style="display:none;">
+          <label for="rangeInput">Intervallo Excel (facoltativo)</label>
+          <input id="rangeInput" type="text" placeholder="Es. A1:D10" />
+        </div>
+      </div>
+      <div class="row3" id="sourceSliceRow" style="margin-top:-2px;">
+        <div class="field source-only source-text" id="wordFromWrap" style="display:none;">
+          <label for="wordFrom">Da paragrafo</label>
+          <input id="wordFrom" type="text" placeholder="1" />
+        </div>
+        <div class="field source-only source-text" id="wordToWrap" style="display:none;">
+          <label for="wordTo">A paragrafo</label>
+          <input id="wordTo" type="text" placeholder="fine" />
+        </div>
+        <div class="field source-only source-presentation" id="pptFromWrap" style="display:none;">
+          <label for="pptFrom">Da slide</label>
+          <input id="pptFrom" type="text" placeholder="1" />
+        </div>
+        <div class="field source-only source-presentation" id="pptToWrap" style="display:none;">
+          <label for="pptTo">A slide</label>
+          <input id="pptTo" type="text" placeholder="fine" />
+        </div>
+        <div class="field source-only source-pdf" id="pdfFromWrap" style="display:none;">
+          <label for="pdfFrom">Da pagina</label>
+          <input id="pdfFrom" type="text" placeholder="1" />
+        </div>
+        <div class="field source-only source-pdf" id="pdfToWrap" style="display:none;">
+          <label for="pdfTo">A pagina</label>
+          <input id="pdfTo" type="text" placeholder="fine" />
+        </div>
+        <div class="field source-only source-json source-xml" id="pathWrap" style="display:none;">
+          <label for="pathInput">Percorso / nodo iniziale (facoltativo)</label>
+          <input id="pathInput" type="text" placeholder="Es. root.items o /root/items" />
+        </div>
+        <div class="field source-only source-database" id="tableFilterWrap" style="display:none;">
+          <label for="tableFilter">Tabella/e da trasferire (facoltativo)</label>
+          <input id="tableFilter" type="text" placeholder="Es. studenti,esami" />
+        </div>
+        <div class="field source-only source-clinical" id="clinicalFilterWrap" style="display:none;">
+          <label for="clinicalFilter">Segmenti / risorse (facoltativo)</label>
+          <input id="clinicalFilter" type="text" placeholder="Es. PID,OBX oppure Patient,Observation" />
+        </div>
+      </div>
+
+      <div class="row" id="sourceHintsRow">
+        <div class="field source-only source-text" id="textHintWrap" style="display:none;">
+          <label>Documento Word</label>
+          <div class="box mini">Estrae soprattutto paragrafi, titoli e tabelle leggibili.</div>
+        </div>
+        <div class="field source-only source-presentation" id="presentationHintWrap" style="display:none;">
+          <label>Presentazione PowerPoint</label>
+          <div class="box mini">Estrae struttura slide, titoli, testi e note principali.</div>
+        </div>
+        <div class="field source-only source-pdf" id="pdfHintWrap" style="display:none;">
+          <label>PDF</label>
+          <div class="box mini">L’estrazione è principalmente testuale, pagina per pagina.</div>
+        </div>
+        <div class="field source-only source-json" id="jsonHintWrap" style="display:none;">
+          <label>JSON</label>
+          <div class="box mini">Conserva struttura e contenuto; gli oggetti profondi possono essere appiattiti.</div>
+        </div>
+        <div class="field source-only source-xml" id="xmlHintWrap" style="display:none;">
+          <label>XML</label>
+          <div class="box mini">Conserva nodi, attributi e testo in forma strutturata.</div>
+        </div>
+        <div class="field source-only source-database" id="databaseHintWrap" style="display:none;">
+          <label>Database / SQL</label>
+          <div class="box mini">Legge tabelle e struttura di base; elementi avanzati possono essere semplificati.</div>
+        </div>
+        <div class="field source-only source-clinical" id="clinicalHintWrap" style="display:none;">
+          <label>Messaggi clinici</label>
+          <div class="box mini">Supporto base a HL7 v2 e FHIR in forma semplificata.</div>
+        </div>
+        <div class="field source-only source-xdl" id="xdlHintWrap" style="display:none;">
+          <label>File XDL</label>
+          <div class="box mini">Se il sorgente è già XDL, puoi ricaricarlo, visualizzarlo e salvarlo subito.</div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="field">
+          <label for="docName">Nome documento XDL</label>
+          <input id="docName" type="text" placeholder="Es. Trasferimento_Ufficio" />
+        </div>
+        <div class="field">
+          <label for="langInput">Lingua</label>
+          <input id="langInput" type="text" value="it" />
+        </div>
+      </div>
+
+      <div class="btnbar">
+        <button type="button" class="primary" id="analyzeBtn">Genera XDL dal file</button>
+        <button type="button" class="ok" id="saveXdlLeftBtn">Salva XDL (.xdl)</button>
+        <button type="button" class="soft" id="loadXdlBtn">Usa il testo XDL attuale</button>
+        <button type="button" class="ghost" id="clearBtn">Pulisci</button>
+      </div>
+
+      <h3>Anteprima XDL</h3>
+      <textarea id="xdlOutput" spellcheck="false" placeholder="Qui apparirà il contenuto XDL generato oppure puoi incollarne uno già pronto..."></textarea>
+      <div class="status" id="statusLeft">In attesa di un file sorgente oppure di un testo XDL incollato manualmente.</div>
+    </section>
+
+    <section class="card">
+      <h2>2. Destinazione e ricostruzione</h2>
+      <div class="sub">Qui la sorgente deve essere un file <strong>XDL</strong> oppure il testo XDL già presente a sinistra. Scegli il formato di uscita desiderato. Le opzioni specifiche di Excel compaiono solo se il formato di destinazione è davvero Excel.</div>
+
+      <div class="field" style="margin-bottom:12px;">
+        <label for="xdlImportFile">File XDL da ricostruire</label>
+        <input id="xdlImportFile" type="file" accept=".xdl,.txt" />
+      </div>
+
+      <div class="row3">
+        <div class="field">
+          <label for="targetType">Formato di destinazione</label>
+          <select id="targetType">
+            <option value="xdl">XDL (.xdl)</option>
+            <option value="xlsx">Excel (.xlsx)</option>
+            <option value="docx">Word (.docx)</option>
+            <option value="pptx">PowerPoint (.pptx)</option>
+            <option value="pdf">PDF (.pdf)</option>
+            <option value="json">JSON (.json)</option>
+            <option value="xml">XML (.xml)</option>
+            <option value="database">Database SQLite (.sqlite)</option>
+            <option value="clinical">Messaggio clinico (.hl7)</option>
+          </select>
+        </div>
+        <div class="field excel-only" id="targetSheetWrap" style="display:none;">
+          <label for="targetSheet">Foglio iniziale Excel</label>
+          <input id="targetSheet" type="text" placeholder="Es. Importazione" />
+        </div>
+        <div class="field excel-only" id="startCellWrap" style="display:none;">
+          <label for="startCell">Posizione iniziale Excel</label>
+          <input id="startCell" type="text" placeholder="A1" value="A1" />
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="field">
+          <label for="baseName">Nome file di uscita</label>
+          <input id="baseName" type="text" placeholder="Es. output_xdl_bridge" />
+        </div>
+        <div class="field">
+          <label for="modeSelect">Modalità di resa</label>
+          <select id="modeSelect">
+            <option value="balanced">Bilanciata</option>
+            <option value="content">Priorità al contenuto</option>
+            <option value="structure">Priorità alla struttura</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="btnbar">
+        <button type="button" class="primary" id="exportBtn">Esporta nel formato scelto</button>
+        <button type="button" class="ok" id="saveXdlBtn">Salva XDL (.xdl)</button>
+      </div>
+
+      <h3>Riassunto del modello interno</h3>
+      <div class="box">
+        <div id="modelSummary" class="mini">Nessun modello XDL disponibile.</div>
+      </div>
+
+      <h3>Log operativo</h3>
+      <div class="status" id="statusRight">Nessuna esportazione eseguita.</div>
+
+      <div class="footer-note mini">
+        <span class="pill">Excel ↔ XDL</span>
+        <span class="pill">Word → XDL → Word</span>
+        <span class="pill">PowerPoint → XDL → PowerPoint</span>
+        <span class="pill">JSON ↔ XDL</span>
+        <span class="pill">XML ↔ XDL</span>
+        <span class="pill">PDF ↔ XDL</span>
+        <span class="pill">Database ↔ XDL</span>
+        <span class="pill">Clinico ↔ XDL</span>
+        <br><br>
+        Il programma privilegia una conversione <strong>trasparente</strong>: quando non può conservare perfettamente layout, formule vive, animazioni o dettagli grafici, li semplifica e li dichiara nel log.
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const sourceFile = $('sourceFile');
+  const sourceType = $('sourceType');
+  const sourceInfo = $('sourceInfo');
+  const sheetName = $('sheetName');
+  const rangeInput = $('rangeInput');
+  const docName = $('docName');
+  const langInput = $('langInput');
+  const xdlOutput = $('xdlOutput');
+  const statusLeft = $('statusLeft');
+  const statusRight = $('statusRight');
+  const modelSummary = $('modelSummary');
+  const targetType = $('targetType');
+  const xdlImportFile = $('xdlImportFile');
+  const targetSheet = $('targetSheet');
+  const startCell = $('startCell');
+  const baseName = $('baseName');
+  const modeSelect = $('modeSelect');
+  const wordFrom = $('wordFrom');
+  const wordTo = $('wordTo');
+  const pptFrom = $('pptFrom');
+  const pptTo = $('pptTo');
+  const pdfFrom = $('pdfFrom');
+  const pdfTo = $('pdfTo');
+  const pathInput = $('pathInput');
+  const tableFilter = $('tableFilter');
+  const clinicalFilter = $('clinicalFilter');
+  const targetSheetWrap = $('targetSheetWrap');
+  const startCellWrap = $('startCellWrap');
+  const sheetNameWrap = $('sheetNameWrap');
+  const rangeInputWrap = $('rangeInputWrap');
+
+  let currentModel = null;
+  let selectedSourceFile = null;
+  if (globalThis.pdfjsLib?.GlobalWorkerOptions) { globalThis.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js'; }
+
+  function setLeft(msg){ statusLeft.textContent = msg; }
+  function setRight(msg){ statusRight.textContent = msg; }
+
+  function escapeXdl(str){
+    return String(str ?? '').replace(/\\/g,'\\\\').replace(/"/g,'\\"').replace(/\n/g,'\\n');
+  }
+
+  function sanitizeIdentifier(name, fallback='Obj'){
+    const s = String(name || fallback).replace(/[^A-Za-z0-9_]+/g,'_').replace(/^_+|_+$/g,'');
+    return s || fallback;
+  }
+
+  function parsePositiveInt(value, fallback){
+    const n = Number(String(value || '').trim());
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
+  }
+
+  function parseCsvSet(text){
+    return new Set(String(text || '').split(',').map(s => s.trim()).filter(Boolean));
+  }
+
+  function detectType(file){
+    const name = (file?.name || '').toLowerCase();
+    if (name.endsWith('.xdl')) return 'xdl';
+    if (name.endsWith('.xlsx') || name.endsWith('.xls') || name.endsWith('.xlsm') || name.endsWith('.ods')) return 'spreadsheet';
+    if (name.endsWith('.docx')) return 'text';
+    if (name.endsWith('.pptx')) return 'presentation';
+    if (name.endsWith('.json')) return 'json';
+    if (name.endsWith('.xml')) return 'xml';
+    if (name.endsWith('.pdf')) return 'pdf';
+    if (name.endsWith('.sqlite') || name.endsWith('.db') || name.endsWith('.sql')) return 'database';
+    if (name.endsWith('.hl7')) return 'clinical';
+    if (name.endsWith('.txt')) return 'clinical';
+    return 'unknown';
+  }
+
+  function inferDocumentName(file){
+    const base = file?.name ? file.name.replace(/\.[^.]+$/, '') : '';
+    return docName.value.trim() || base || 'Documento_XDL';
+  }
+
+  function makeEmptyModel(profile='GENERIC', name='Documento_XDL'){
+    return {
+      profile,
+      name,
+      meta: { author:'', created:new Date().toISOString().slice(0,10), version:'1.0', language: langInput.value.trim() || 'it' },
+      sections: [],
+      tables: [],
+      workbook: null,
+      deck: null,
+      notes: [],
+      losses: []
+    };
+  }
+
+  function cellType(v){
+    if (v === null || v === undefined || v === '') return 'empty';
+    if (typeof v === 'boolean') return 'boolean';
+    if (typeof v === 'number') return Number.isInteger(v) ? 'integer' : 'decimal';
+    if (v instanceof Date) return 'date';
+    return 'text';
+  }
+
+  function quoteValue(type, v){
+    if (type === 'integer' || type === 'decimal') return String(v);
+    if (type === 'boolean') return v ? 'true' : 'false';
+    if (type === 'empty') return 'null';
+    if (type === 'date') {
+      const d = v instanceof Date ? v.toISOString().slice(0,10) : String(v);
+      return '"' + escapeXdl(d) + '"';
+    }
+    return '"' + escapeXdl(v) + '"';
+  }
+
+  function modelToXdl(model){
+    const lines = [];
+    lines.push(`DOCUMENT "${escapeXdl(model.name)}" AS ${model.profile || 'GENERIC'} {`);
+    lines.push(`  META {`);
+    const meta = model.meta || {};
+    for (const [k,v] of Object.entries(meta)) lines.push(`    ${k} = "${escapeXdl(v)}";`);
+    lines.push(`  }`);
+    lines.push('');
+
+    for (const sec of (model.sections || [])) {
+      lines.push(`  SECTION "${escapeXdl(sec.name)}" {`);
+      for (const item of (sec.items || [])) {
+        if (item.kind === 'HEADING') lines.push(`    HEADING ${sanitizeIdentifier(item.id || 'H')} level=${item.level || 1} : text = "${escapeXdl(item.text)}";`);
+        if (item.kind === 'PARAGRAPH') lines.push(`    PARAGRAPH ${sanitizeIdentifier(item.id || 'P')} : richtext = "${escapeXdl(item.text)}";`);
+        if (item.kind === 'LIST') {
+          lines.push(`    LIST ${sanitizeIdentifier(item.id || 'L')} {`);
+          for (const li of item.items || []) lines.push(`      ITEM : text = "${escapeXdl(li)}";`);
+          lines.push(`    }`);
+        }
+      }
+      lines.push(`  }`);
+      lines.push('');
+    }
+
+    for (const tbl of (model.tables || [])) {
+      lines.push(`  TABLE "${escapeXdl(tbl.name)}" {`);
+      for (const f of tbl.fields || []) lines.push(`    FIELD "${escapeXdl(f.name)}" : ${f.type || 'text'};`);
+      if ((tbl.fields || []).length && (tbl.rows || []).length) lines.push('');
+      for (const row of tbl.rows || []) {
+        lines.push('    ROW {');
+        for (const [k,v] of Object.entries(row)) {
+          const t = cellType(v);
+          lines.push(`      ${sanitizeIdentifier(k)} = ${quoteValue(t, v)};`);
+        }
+        lines.push('    }');
+      }
+      lines.push('  }');
+      lines.push('');
+    }
+
+    if (model.workbook) {
+      lines.push(`  WORKBOOK "${escapeXdl(model.workbook.name || 'Workbook')}" {`);
+      for (const sh of model.workbook.sheets || []) {
+        lines.push(`    SHEET "${escapeXdl(sh.name)}" {`);
+        for (const cell of sh.cells || []) {
+          if (cell.formula) {
+            lines.push(`      CELL ${cell.ref} : formula := ${cell.formula};`);
+          } else {
+            const t = cell.type || cellType(cell.value);
+            lines.push(`      CELL ${cell.ref} : ${t} = ${quoteValue(t, cell.value)};`);
+          }
+        }
+        lines.push(`    }`);
+      }
+      lines.push(`  }`);
+      lines.push('');
+    }
+
+    if (model.deck) {
+      lines.push(`  DECK "${escapeXdl(model.deck.name || 'Presentazione')}" {`);
+      for (const slide of model.deck.slides || []) {
+        lines.push(`    SLIDE "${escapeXdl(slide.name)}" {`);
+        if (slide.title) lines.push(`      PLACEHOLDER Title : text = "${escapeXdl(slide.title)}";`);
+        if (slide.subtitle) lines.push(`      PLACEHOLDER Subtitle : text = "${escapeXdl(slide.subtitle)}";`);
+        for (const box of slide.texts || []) lines.push(`      TEXT ${sanitizeIdentifier(box.id || 'T')} : richtext = "${escapeXdl(box.text)}";`);
+        for (const note of slide.notes || []) lines.push(`      NOTES : text = "${escapeXdl(note)}";`);
+        lines.push(`    }`);
+      }
+      lines.push(`  }`);
+      lines.push('');
+    }
+
+    lines.push(`  TRANSFORM "${sanitizeIdentifier((model.profile || 'GENERIC') + '_Bridge')}" {`);
+    if (model.profile === 'SPREADSHEET') {
+      lines.push(`    PRESERVE = [tables, numeric_values, formulas];`);
+      lines.push(`    DEGRADE = [styles, comments];`);
+      lines.push(`    LOSS = [macros];`);
+    } else if (model.profile === 'TEXT') {
+      lines.push(`    PRESERVE = [paragraphs, headings, tables];`);
+      lines.push(`    DEGRADE = [advanced_page_layout];`);
+      lines.push(`    LOSS = [exact_pagination];`);
+    } else if (model.profile === 'PRESENTATION') {
+      lines.push(`    PRESERVE = [slides, titles, text_blocks];`);
+      lines.push(`    DEGRADE = [layout_precision, themes];`);
+      lines.push(`    LOSS = [animations, transitions];`);
+    } else {
+      lines.push(`    PRESERVE = [content, metadata];`);
+      lines.push(`    DEGRADE = [format_specific_features];`);
+      lines.push(`    LOSS = [unsupported_native_behaviors];`);
+    }
+    lines.push(`  }`);
+
+    lines.push('}');
+    return lines.join('\n');
+  }
+
+  function summarizeModel(model){
+    const bits = [];
+    bits.push(`<strong>Profilo:</strong> ${model.profile || 'GENERIC'}`);
+    bits.push(`<strong>Documento:</strong> ${model.name || '-'}`);
+    bits.push(`<strong>Sezioni testo:</strong> ${(model.sections || []).length}`);
+    bits.push(`<strong>Tabelle astratte:</strong> ${(model.tables || []).length}`);
+    bits.push(`<strong>Workbook:</strong> ${model.workbook ? (model.workbook.sheets || []).length + ' fogli' : 'no'}`);
+    bits.push(`<strong>Presentazione:</strong> ${model.deck ? (model.deck.slides || []).length + ' slide' : 'no'}`);
+    bits.push(`<strong>Note perdite dichiarate:</strong> ${(model.losses || []).length}`);
+    modelSummary.innerHTML = bits.join('<br>');
+  }
+
+  function extractNamedBlocks(text, keyword){
+    const out = [];
+    const rx = new RegExp(keyword + String.raw`\s+"([^"]+)"\s*\{`, 'g');
+    let m;
+    while ((m = rx.exec(text)) !== null) {
+      const name = m[1];
+      let i = rx.lastIndex;
+      let depth = 1;
+      while (i < text.length && depth > 0) {
+        const ch = text[i++];
+        if (ch === '{') depth++;
+        else if (ch === '}') depth--;
+      }
+      const body = text.slice(rx.lastIndex, i - 1);
+      out.push({ name, body });
+      rx.lastIndex = i;
+    }
+    return out;
+  }
+
+  function extractInlineBlocks(text, keyword){
+    const out = [];
+    const rx = new RegExp(keyword + String.raw`\s*\{`, 'g');
+    let m;
+    while ((m = rx.exec(text)) !== null) {
+      let i = rx.lastIndex;
+      let depth = 1;
+      while (i < text.length && depth > 0) {
+        const ch = text[i++];
+        if (ch === '{') depth++;
+        else if (ch === '}') depth--;
+      }
+      out.push(text.slice(rx.lastIndex, i - 1));
+      rx.lastIndex = i;
+    }
+    return out;
+  }
+
+  function parseXdlLoose(text){
+    const model = makeEmptyModel('GENERIC', 'Documento_XDL');
+    const mDoc = text.match(/DOCUMENT\s+"([^"]+)"\s+AS\s+([A-Z_]+)/);
+    if (mDoc) { model.name = mDoc[1]; model.profile = mDoc[2]; }
+    const metaBlock = text.match(/META\s*\{([\s\S]*?)\}/);
+    if (metaBlock) {
+      const rx = /([A-Za-z_][A-Za-z0-9_]*)\s*=\s*"([\s\S]*?)"\s*;/g;
+      let mm; model.meta = {};
+      while ((mm = rx.exec(metaBlock[1])) !== null) {
+        model.meta[mm[1]] = unesc(mm[2]);
+      }
+    }
+
+    for (const sm of extractNamedBlocks(text, 'SECTION')) {
+      const sec = { name: sm.name, items: [] };
+      const body = sm.body;
+      const headingRx = /HEADING\s+([A-Za-z0-9_]+)\s+level=(\d+)\s*:\s*text\s*=\s*"([\s\S]*?)"\s*;/g;
+      const paraRx = /PARAGRAPH\s+([A-Za-z0-9_]+)\s*:\s*richtext\s*=\s*"([\s\S]*?)"\s*;/g;
+      let hm; while ((hm = headingRx.exec(body)) !== null) sec.items.push({kind:'HEADING', id:hm[1], level:Number(hm[2]), text:unesc(hm[3])});
+      let pm; while ((pm = paraRx.exec(body)) !== null) sec.items.push({kind:'PARAGRAPH', id:pm[1], text:unesc(pm[2])});
+      model.sections.push(sec);
+    }
+
+    for (const tm of extractNamedBlocks(text, 'TABLE')) {
+      const tbl = { name: tm.name, fields: [], rows: [] };
+      const body = tm.body;
+      const fieldRx = /FIELD\s+"([^"]+)"\s*:\s*([A-Za-z0-9_()]+)\s*;/g;
+      let fm; while ((fm = fieldRx.exec(body)) !== null) tbl.fields.push({name:fm[1], type:fm[2]});
+      for (const rowBody of extractInlineBlocks(body, 'ROW')) {
+        const row = {};
+        const entryRx = /([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(null|true|false|"[\s\S]*?"|-?\d+(?:\.\d+)?)\s*;/g;
+        let em; while ((em = entryRx.exec(rowBody)) !== null) row[em[1]] = parseLiteral(em[2]);
+        tbl.rows.push(row);
+      }
+      model.tables.push(tbl);
+    }
+
+    const wbBlocks = extractNamedBlocks(text, 'WORKBOOK');
+    if (wbBlocks.length) {
+      const wbBlock = wbBlocks[0];
+      model.profile = model.profile === 'GENERIC' ? 'SPREADSHEET' : model.profile;
+      model.workbook = { name: wbBlock.name, sheets: [] };
+      for (const shm of extractNamedBlocks(wbBlock.body, 'SHEET')) {
+        const sh = { name: shm.name, cells: [] };
+        const cellRx = /CELL\s+([A-Z]+\d+)\s*:\s*([A-Za-z0-9_()]+)\s*(=|:=)\s*([^;]+);/g;
+        let cm; while ((cm = cellRx.exec(shm.body)) !== null) {
+          const ref = cm[1], type = cm[2], op = cm[3], raw = cm[4].trim();
+          if (type === 'formula' || op === ':=') sh.cells.push({ref, type:'formula', formula:raw});
+          else sh.cells.push({ref, type, value:parseLiteral(raw)});
+        }
+        model.workbook.sheets.push(sh);
+      }
+    }
+
+    const deckBlocks = extractNamedBlocks(text, 'DECK');
+    if (deckBlocks.length) {
+      const deckBlock = deckBlocks[0];
+      model.profile = model.profile === 'GENERIC' ? 'PRESENTATION' : model.profile;
+      model.deck = { name: deckBlock.name, slides: [] };
+      for (const slm of extractNamedBlocks(deckBlock.body, 'SLIDE')) {
+        const slide = { name: slm.name, title:'', subtitle:'', texts:[], notes:[] };
+        const body = slm.body;
+        const titleM = body.match(/PLACEHOLDER\s+Title\s*:\s*text\s*=\s*"([\s\S]*?)"\s*;/);
+        const subM = body.match(/PLACEHOLDER\s+Subtitle\s*:\s*text\s*=\s*"([\s\S]*?)"\s*;/);
+        if (titleM) slide.title = unesc(titleM[1]);
+        if (subM) slide.subtitle = unesc(subM[1]);
+        const textRx = /TEXT\s+([A-Za-z0-9_]+)\s*:\s*richtext\s*=\s*"([\s\S]*?)"\s*;/g;
+        let tx; while ((tx = textRx.exec(body)) !== null) slide.texts.push({id:tx[1], text:unesc(tx[2])});
+        const noteRx = /NOTES\s*:\s*text\s*=\s*"([\s\S]*?)"\s*;/g;
+        let nx; while ((nx = noteRx.exec(body)) !== null) slide.notes.push(unesc(nx[1]));
+        model.deck.slides.push(slide);
+      }
+    }
+
+    return model;
+  }
+
+  function unesc(s){ return String(s).replace(/\\n/g,'\n').replace(/\\"/g,'"').replace(/\\\\/g,'\\'); }
+  function parseLiteral(raw){
+    const s = String(raw).trim();
+    if (s === 'null') return null;
+    if (s === 'true') return true;
+    if (s === 'false') return false;
+    if (/^"[\s\S]*"$/.test(s)) return unesc(s.slice(1,-1));
+    if (/^-?\d+(\.\d+)?$/.test(s)) return Number(s);
+    return s;
+  }
+
+  async function readFileAsArrayBuffer(file){ return await file.arrayBuffer(); }
+  async function readFileAsText(file){ return await file.text(); }
+
+
+  function toTextParagraph(text){
+    return {kind:'PARAGRAPH', id:'P' + Math.floor(Math.random()*100000), text:String(text ?? '')};
+  }
+
+  function objectArrayToTable(arr, name='DatiJSON'){
+    const keys = Array.from(arr.reduce((s,o)=>{ Object.keys(o||{}).forEach(k=>s.add(k)); return s; }, new Set()));
+    return {
+      name,
+      fields: keys.map(k => ({name:k, type:'text'})),
+      rows: arr.map(o => Object.fromEntries(keys.map(k => [k, o?.[k] ?? ''])))
+    };
+  }
+
+  function flattenObject(obj, prefix='', out=[]){
+    if (obj === null || obj === undefined) { out.push([prefix || 'value', null]); return out; }
+    if (Array.isArray(obj)) {
+      if (obj.every(v => typeof v !== 'object' || v === null)) out.push([prefix || 'array', obj.join(' | ')]);
+      else obj.forEach((v,i)=>flattenObject(v, prefix ? `${prefix}[${i}]` : `[${i}]`, out));
+      return out;
+    }
+    if (typeof obj === 'object') {
+      for (const [k,v] of Object.entries(obj)) flattenObject(v, prefix ? `${prefix}.${k}` : k, out);
+      return out;
+    }
+    out.push([prefix || 'value', obj]);
+    return out;
+  }
+
+  async function jsonToModel(file){
+    const name = inferDocumentName(file);
+    const model = makeEmptyModel('GENERIC', name);
+    model.meta.source_format = 'JSON';
+    const text = await readFileAsText(file);
+    let data = JSON.parse(text);
+    const path = pathInput.value.trim();
+    if (path) {
+      const parts = path.replace(/^\/+/, '').split(/[./]/).filter(Boolean);
+      let cur = data;
+      for (const part of parts) {
+        if (cur && typeof cur === 'object' && part in cur) cur = cur[part];
+        else throw new Error(`Percorso JSON non trovato: ${path}`);
+      }
+      data = cur;
+      model.meta.source_path = path;
+    }
+    if (Array.isArray(data) && data.every(v => typeof v === 'object' && v && !Array.isArray(v))) {
+      model.tables.push(objectArrayToTable(data, 'JSON_Array'));
+    } else {
+      const sec = {name:'JSON', items:[toTextParagraph('Documento JSON convertito in struttura XDL.')]};
+      const flat = flattenObject(data);
+      if (flat.length) {
+        model.tables.push({name:'JSON_Flat', fields:[{name:'Path', type:'text'},{name:'Value', type:'text'}], rows:flat.map(([p,v])=>({Path:p, Value: v === null ? '' : String(v)}))});
+      }
+      sec.items.push(toTextParagraph(JSON.stringify(data, null, 2)));
+      model.sections.push(sec);
+    }
+    model.losses.push('Gerarchie JSON profonde possono essere appiattite nella tabella JSON_Flat.');
+    return model;
+  }
+
+  function xmlNodeToRows(node, path='', rows=[]){
+    const current = path ? `${path}/${node.nodeName}` : node.nodeName;
+    const children = Array.from(node.childNodes || []);
+    const attrs = Array.from(node.attributes || []).map(a => `${a.name}=${a.value}`).join('; ');
+    const text = children.filter(n => n.nodeType === 3).map(n => n.nodeValue.trim()).filter(Boolean).join(' ');
+    rows.push({Path: current, Attributes: attrs, Text: text});
+    children.filter(n => n.nodeType === 1).forEach(ch => xmlNodeToRows(ch, current, rows));
+    return rows;
+  }
+
+  async function xmlToModel(file){
+    const name = inferDocumentName(file);
+    const model = makeEmptyModel('GENERIC', name);
+    model.meta.source_format = 'XML';
+    const text = await readFileAsText(file);
+    const xml = new DOMParser().parseFromString(text, 'application/xml');
+    let root = xml.documentElement;
+    if (!root || root.nodeName === 'parsererror') throw new Error('XML non valido.');
+
+    if (root.nodeName === 'xdl-document') {
+      const embeddedJsonNode = Array.from(root.children || []).find(n => n.nodeName === 'xdl-json');
+      if (embeddedJsonNode && (embeddedJsonNode.textContent || '').trim()) {
+        try {
+          const raw = JSON.parse(embeddedJsonNode.textContent);
+          model.name = raw.name || name;
+          model.profile = raw.profile || 'GENERIC';
+          model.meta = raw.meta || {};
+          model.sections = raw.sections || [];
+          model.tables = raw.tables || [];
+          model.workbook = raw.workbook || null;
+          model.deck = raw.deck || null;
+          model.losses = raw.losses || [];
+          model.meta.source_format = 'XDL_XML';
+          return model;
+        } catch (e) {
+          console.warn('xdl-json non leggibile, uso il parser XML strutturale', e);
+        }
+      }
+
+      model.name = root.getAttribute('name') || name;
+      model.profile = root.getAttribute('profile') || 'GENERIC';
+
+      const metaNode = root.querySelector(':scope > meta');
+      if (metaNode) {
+        for (const entry of Array.from(metaNode.children || [])) {
+          if (entry.nodeName !== 'entry') continue;
+          const k = entry.getAttribute('key');
+          if (k) model.meta[k] = entry.textContent || '';
+        }
+      }
+
+      for (const secNode of Array.from(root.children || []).filter(n => n.nodeName === 'section')) {
+        const sec = { name: secNode.getAttribute('name') || 'Section', items: [] };
+        for (const itemNode of Array.from(secNode.children || []).filter(n => n.nodeName === 'item')) {
+          sec.items.push({
+            kind: itemNode.getAttribute('kind') || 'PARAGRAPH',
+            text: itemNode.textContent || ''
+          });
+        }
+        model.sections.push(sec);
+      }
+
+      for (const tblNode of Array.from(root.children || []).filter(n => n.nodeName === 'table')) {
+        const tbl = { name: tblNode.getAttribute('name') || 'Table', fields: [], rows: [] };
+        const fieldsNode = Array.from(tblNode.children || []).find(n => n.nodeName === 'fields');
+        if (fieldsNode) {
+          for (const fNode of Array.from(fieldsNode.children || []).filter(n => n.nodeName === 'field')) {
+            tbl.fields.push({ name: fNode.getAttribute('name') || 'Field', type: fNode.getAttribute('type') || 'text' });
+          }
+        }
+        const rowsNode = Array.from(tblNode.children || []).find(n => n.nodeName === 'rows');
+        if (rowsNode) {
+          for (const rNode of Array.from(rowsNode.children || []).filter(n => n.nodeName === 'row')) {
+            const row = {};
+            for (const cNode of Array.from(rNode.children || []).filter(n => n.nodeName === 'cell')) {
+              const key = cNode.getAttribute('key') || 'Value';
+              row[key] = cNode.textContent || '';
+            }
+            tbl.rows.push(row);
+          }
+        }
+        model.tables.push(tbl);
+      }
+
+      const wbNode = Array.from(root.children || []).find(n => n.nodeName === 'workbook');
+      if (wbNode) {
+        model.workbook = { name: wbNode.getAttribute('name') || 'Workbook', sheets: [] };
+        for (const shNode of Array.from(wbNode.children || []).filter(n => n.nodeName === 'sheet')) {
+          const sh = { name: shNode.getAttribute('name') || 'Sheet1', cells: [] };
+          for (const cNode of Array.from(shNode.children || []).filter(n => n.nodeName === 'cell')) {
+            const ref = cNode.getAttribute('ref');
+            if (!ref) continue;
+            const type = cNode.getAttribute('type') || 'text';
+            const formula = cNode.getAttribute('formula');
+            if (formula) sh.cells.push({ ref, type: 'formula', formula });
+            else sh.cells.push({ ref, type, value: parseLiteral(cNode.textContent || '') });
+          }
+          model.workbook.sheets.push(sh);
+        }
+      }
+
+      const deckNode = Array.from(root.children || []).find(n => n.nodeName === 'deck');
+      if (deckNode) {
+        model.deck = { name: deckNode.getAttribute('name') || 'Deck', slides: [] };
+        for (const slNode of Array.from(deckNode.children || []).filter(n => n.nodeName === 'slide')) {
+          const slide = { name: slNode.getAttribute('name') || 'Slide', title: '', subtitle: '', texts: [], notes: [] };
+          const titleNode = Array.from(slNode.children || []).find(n => n.nodeName === 'title');
+          const subNode = Array.from(slNode.children || []).find(n => n.nodeName === 'subtitle');
+          slide.title = slNode.getAttribute('title') || (titleNode ? titleNode.textContent || '' : '');
+          slide.subtitle = slNode.getAttribute('subtitle') || (subNode ? subNode.textContent || '' : '');
+          for (const tNode of Array.from(slNode.children || []).filter(n => n.nodeName === 'text')) slide.texts.push({ text: tNode.textContent || '' });
+          for (const nNode of Array.from(slNode.children || []).filter(n => n.nodeName === 'note' || n.nodeName === 'notes')) slide.notes.push(nNode.textContent || '');
+          model.deck.slides.push(slide);
+        }
+      }
+
+      model.meta.source_format = 'XDL_XML';
+      return model;
+    }
+
+    const path = pathInput.value.trim();
+    if (path) {
+      const parts = path.replace(/^\/+/, '').split('/').filter(Boolean);
+      let node = root;
+      for (const part of parts) {
+        const next = Array.from(node.children || []).find(ch => ch.nodeName === part);
+        if (!next) throw new Error(`Nodo XML non trovato: ${path}`);
+        node = next;
+      }
+      root = node;
+      model.meta.source_path = path;
+    }
+    model.sections.push({name:'XML', items:[toTextParagraph(`Radice XML: ${root.nodeName}`)]});
+    const rows = xmlNodeToRows(root);
+    model.tables.push({name:'XML_Tree', fields:[{name:'Path', type:'text'},{name:'Attributes', type:'text'},{name:'Text', type:'text'}], rows});
+    model.losses.push('Le relazioni XML vengono rappresentate soprattutto come albero percorso/attributi/testo.');
+    return model;
+  }
+
+
+  function classifyPdfLine(line, medianHeight){
+    const t = String(line.text || '').trim();
+    const h = Number(line.height || 0);
+    if (!t) return 'blank';
+    if (/^(Pagina[_ ]?\d+)$/i.test(t)) return 'ignore';
+    if (/^(<[^>]+>|[A-Z_]+\s+"[^"]+"\s*\{|[A-Z_]+\s+[A-Z0-9:]+\s*[:=<\-])/.test(t) || /::=|:=|<-|\{\s*$/.test(t)) return 'code';
+    if ((h && medianHeight && h >= medianHeight * 1.35 && t.length <= 120) || /^(\d+(\.\d+)*)\s+/.test(t) || /^[A-Z][A-Za-zÀ-ÿ0-9\- ]{3,90}$/.test(t)) return 'heading';
+    if (/\s{2,}|\t/.test(t)) return 'table';
+    return 'paragraph';
+  }
+
+  
+  function extractPdfLines(textContent){
+    const rows = [];
+    const yTol = 3;
+    const sorted = (textContent.items || []).map(it => ({
+      text: String(it.str || '').replace(/\s+/g, ' ').trim(),
+      x: Number((it.transform && it.transform[4]) || 0),
+      y: Number((it.transform && it.transform[5]) || 0),
+      height: Number(it.height || Math.abs((it.transform && it.transform[3]) || 0) || 10),
+      width: Number(it.width || 0)
+    })).sort((a,b)=> (b.y-a.y) || (a.x-b.x));
+    for (const it of sorted) {
+      if (!it.text) continue;
+      let line = rows.find(r => Math.abs(r.y - it.y) <= yTol);
+      if (!line) {
+        line = { y: it.y, parts: [], maxHeight: it.height, minX: it.x };
+        rows.push(line);
+      }
+      line.parts.push(it);
+      line.maxHeight = Math.max(line.maxHeight, it.height || 0);
+      line.minX = Math.min(line.minX, it.x || 0);
+    }
+    rows.sort((a,b)=> b.y-a.y);
+    return rows.map(r => {
+      r.parts.sort((a,b)=>a.x-b.x);
+      let txt = '';
+      let prev = null;
+      for (const part of r.parts) {
+        const piece = String(part.text || '');
+        if (!piece) continue;
+        if (!txt) txt = piece;
+        else {
+          const gap = prev ? (part.x - (prev.x + (prev.width || 0))) : 4;
+          const needSpace = gap > 2 && !/^[,.;:!?)]/.test(piece) && !/[(/-]$/.test(txt);
+          txt += (needSpace ? ' ' : '') + piece;
+        }
+        prev = part;
+      }
+      txt = txt.replace(/\s+/g, ' ').replace(/ ?([,.;:!?])/g, '$1').trim();
+      return { text: txt, y: r.y, height: r.maxHeight, minX: r.minX };
+    }).filter(l => l.text);
+  }
+
+  function tryBuildSimplePdfTableSection(lines, pageNumber){
+    const cleaned = lines.map(l => ({...l, text: String(l.text || '').trim()})).filter(l => l.text);
+    if (!cleaned.length) return null;
+    let headerIdx = cleaned.findIndex(l => /^Materia\s+Anni$/i.test(l.text));
+    if (headerIdx < 0) {
+      headerIdx = cleaned.findIndex((l,i)=> i+1<cleaned.length && /^Materia$/i.test(l.text) && /^Anni$/i.test(cleaned[i+1].text));
+      if (headerIdx >= 0) {
+        cleaned.splice(headerIdx,2,{...cleaned[headerIdx], text:'Materia Anni'});
+      }
+    }
+    if (headerIdx < 0) return null;
+    const before = cleaned.slice(0, headerIdx).map(l=>l.text).filter(Boolean);
+    const title = before[0] || `Pagina_${pageNumber}`;
+    const items = [];
+    if (title) items.push({kind:'HEADING', level:1, text:title});
+    if (before.length > 1) {
+      for (const txt of before.slice(1)) items.push({kind:'PARAGRAPH', text:txt});
+    }
+    const fields = [{name:'Materia', type:'text'}, {name:'Anni', type:'integer'}];
+    const rows = [];
+    for (const l of cleaned.slice(headerIdx+1)) {
+      const m = l.text.match(/^(.*?)(?:\s+)(\d+)$/);
+      if (!m) continue;
+      const materia = m[1].trim();
+      const anni = m[2].trim();
+      if (!materia) continue;
+      rows.push({Materia:materia, Anni:anni});
+    }
+    if (!rows.length) return null;
+    items.push({kind:'TABLE', name:`Tabella_Pagina_${pageNumber}`, fields, rows});
+    return {name:`Pagina_${pageNumber}`, sourcePage:true, pageNumber, items};
+  }
+
+function buildPdfPageItems(tc){
+    const items = (tc.items || []).filter(it => String(it.str || '').trim().length);
+    if (!items.length) return [toTextParagraph('[Pagina senza testo estraibile]')];
+    const rows = [];
+    const yTol = 3;
+    const sorted = items.map(it => ({
+      text: String(it.str || ''),
+      x: Number((it.transform && it.transform[4]) || 0),
+      y: Number((it.transform && it.transform[5]) || 0),
+      height: Number(it.height || Math.abs((it.transform && it.transform[3]) || 0) || 10),
+      width: Number(it.width || 0)
+    })).sort((a,b)=> (b.y-a.y) || (a.x-b.x));
+
+    for (const it of sorted) {
+      let line = rows.find(r => Math.abs(r.y - it.y) <= yTol);
+      if (!line) {
+        line = { y: it.y, parts: [], maxHeight: it.height, minX: it.x };
+        rows.push(line);
+      }
+      line.parts.push(it);
+      line.maxHeight = Math.max(line.maxHeight, it.height || 0);
+      line.minX = Math.min(line.minX, it.x || 0);
+    }
+    rows.sort((a,b)=> b.y-a.y);
+    const lines = rows.map(r => {
+      r.parts.sort((a,b)=>a.x-b.x);
+      let txt = '';
+      let prev = null;
+      for (const part of r.parts) {
+        const piece = String(part.text || '');
+        if (!piece) continue;
+        if (!txt) txt = piece;
+        else {
+          const gap = prev ? (part.x - (prev.x + (prev.width || 0))) : 4;
+          const needSpace = gap > 2 && !/^[,.;:!?)]/.test(piece) && !/[(/-]$/.test(txt);
+          txt += (needSpace ? ' ' : '') + piece;
+        }
+        prev = part;
+      }
+      txt = txt.replace(/\s+/g, ' ').replace(/ ?([,.;:!?])/g, '$1').trim();
+      return { text: txt, y: r.y, height: r.maxHeight, minX: r.minX };
+    }).filter(l => l.text);
+
+    const heights = lines.map(l => l.height).filter(Boolean).sort((a,b)=>a-b);
+    const medianHeight = heights.length ? heights[Math.floor(heights.length/2)] : 10;
+    const itemsOut = [];
+    let paraBuffer = [];
+    let tableBuffer = [];
+    let codeBuffer = [];
+
+    const flushParagraph = () => {
+      if (!paraBuffer.length) return;
+      itemsOut.push(toTextParagraph(paraBuffer.join(' ').replace(/\s+/g,' ').trim()));
+      paraBuffer = [];
+    };
+    const flushTable = () => {
+      if (!tableBuffer.length) return;
+      itemsOut.push({kind:'PARAGRAPH', code:true, text: tableBuffer.join('\n')});
+      tableBuffer = [];
+    };
+    const flushCode = () => {
+      if (!codeBuffer.length) return;
+      itemsOut.push({kind:'PARAGRAPH', code:true, text: codeBuffer.join('\n')});
+      codeBuffer = [];
+    };
+
+    for (let i=0; i<lines.length; i++) {
+      const line = lines[i];
+      const next = lines[i+1] || null;
+      const kind = classifyPdfLine(line, medianHeight);
+      const gapBelow = next ? Math.abs(line.y - next.y) : medianHeight * 2;
+      if (kind === 'ignore' || kind === 'blank') continue;
+      if (kind === 'heading') {
+        flushParagraph(); flushTable(); flushCode();
+        itemsOut.push({kind:'HEADING', level:1, text: line.text});
+        continue;
+      }
+      if (kind === 'code') {
+        flushParagraph(); flushTable();
+        codeBuffer.push(line.text);
+        if (!next || classifyPdfLine(next, medianHeight) !== 'code') flushCode();
+        continue;
+      }
+      if (kind === 'table') {
+        flushParagraph(); flushCode();
+        tableBuffer.push(line.text);
+        if (!next || classifyPdfLine(next, medianHeight) !== 'table') flushTable();
+        continue;
+      }
+      flushTable(); flushCode();
+      let text = line.text;
+      if (text.endsWith('-') && next && classifyPdfLine(next, medianHeight) === 'paragraph') {
+        text = text.slice(0, -1);
+      }
+      paraBuffer.push(text);
+      const paragraphEnd = /[.!?;:]$/.test(line.text) || gapBelow > medianHeight * 1.9 || !next || classifyPdfLine(next, medianHeight) !== 'paragraph';
+      if (paragraphEnd) flushParagraph();
+    }
+    flushParagraph(); flushTable(); flushCode();
+    return itemsOut.length ? itemsOut : [toTextParagraph(lines.map(l => l.text).join(' '))];
+  }
+
+  async function pdfToModel(file){
+    const name = inferDocumentName(file);
+    const model = makeEmptyModel('GENERIC', name);
+    model.meta.source_format = 'PDF';
+    const data = await readFileAsArrayBuffer(file);
+    const pdfjsLib = globalThis.pdfjsLib;
+    if (!pdfjsLib) throw new Error('Libreria PDF non ancora caricata nel browser.');
+    const pdf = await pdfjsLib.getDocument({data}).promise;
+    const fromPage = parsePositiveInt(pdfFrom.value, 1);
+    const toPage = parsePositiveInt(pdfTo.value, pdf.numPages);
+    if (fromPage > toPage || fromPage < 1 || toPage > pdf.numPages) throw new Error(`Intervallo pagine PDF non valido: ${fromPage}-${toPage}`);
+    model.meta.page_range = `${fromPage}-${toPage}`;
+    for (let i=fromPage; i<=toPage; i++) {
+      const page = await pdf.getPage(i);
+      const tc = await page.getTextContent();
+      const lines = extractPdfLines(tc);
+      const structuredSec = tryBuildSimplePdfTableSection(lines, i);
+      if (structuredSec) model.sections.push(structuredSec);
+      else {
+        const items = buildPdfPageItems(tc);
+        model.sections.push({name:`Pagina_${i}`, sourcePage:true, pageNumber:i, items});
+      }
+    }
+    model.losses.push('Dal PDF vengono estratti soprattutto testo, titoli e struttura per pagina; layout complesso, colonne, immagini e tabelle avanzate possono andare persi o degradati.');
+    return model;
+  }
+
+  async function databaseToModel(file){
+    const name = inferDocumentName(file);
+    const model = makeEmptyModel('GENERIC', name);
+    model.meta.source_format = 'DATABASE';
+    const lower = (file.name || '').toLowerCase();
+    if (lower.endsWith('.sql')) {
+      const text = await readFileAsText(file);
+      model.sections.push({name:'SQL', items:[toTextParagraph(text)]});
+      model.losses.push('Lo script SQL testuale viene conservato come testo; il parsing SQL completo non è garantito.');
+      return model;
+    }
+    if (typeof initSqlJs !== 'function') throw new Error('sql.js non disponibile nel browser.');
+    const SQL = await initSqlJs({ locateFile: f => `https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/${f}` });
+    const db = new SQL.Database(new Uint8Array(await readFileAsArrayBuffer(file)));
+    const tables = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name");
+    let names = (tables[0]?.values || []).map(r => String(r[0]));
+    const wanted = parseCsvSet(tableFilter.value);
+    if (wanted.size) names = names.filter(n => wanted.has(n));
+    if (!names.length) model.sections.push({name:'Database', items:[toTextParagraph('Database senza tabelle utente leggibili.')]});
+    for (const t of names) {
+      const res = db.exec(`SELECT * FROM "${t.replace(/"/g,'""')}" LIMIT 1000`);
+      const first = res[0];
+      if (!first) continue;
+      const fields = first.columns.map(c => ({name:c, type:'text'}));
+      const rows = first.values.map(vs => Object.fromEntries(first.columns.map((c,i)=>[c, vs[i] ?? ''])));
+      model.tables.push({name:t, fields, rows});
+    }
+    model.losses.push('Vincoli, indici, trigger e viste del database non vengono ricostruiti completamente nel modello XDL.');
+    return model;
+  }
+
+  function parseHl7Text(text){
+    const lines = text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n').map(s=>s.trim()).filter(Boolean);
+    const bySeg = {};
+    for (const line of lines) {
+      const parts = line.split('|');
+      const seg = parts[0] || 'SEG';
+      bySeg[seg] ||= [];
+      const row = {};
+      parts.slice(1).forEach((v,i)=> row[`F${i+1}`] = v);
+      bySeg[seg].push(row);
+    }
+    return bySeg;
+  }
+
+  async function clinicalToModel(file){
+    const name = inferDocumentName(file);
+    const model = makeEmptyModel('GENERIC', name);
+    model.meta.source_format = 'CLINICAL';
+    const text = await readFileAsText(file);
+    const trimmed = text.trim();
+    if (/^MSH\|/.test(trimmed)) {
+      model.sections.push({name:'Clinical_Message', items:[toTextParagraph('Messaggio clinico HL7 v2 riconosciuto.')]});
+      let segs = parseHl7Text(trimmed);
+      const wanted = parseCsvSet(clinicalFilter.value);
+      if (wanted.size) segs = Object.fromEntries(Object.entries(segs).filter(([seg]) => wanted.has(seg)));
+      for (const [seg, rows] of Object.entries(segs)) {
+        const maxF = Math.max(0, ...rows.map(r => Object.keys(r).length));
+        model.tables.push({name:`HL7_${seg}`, fields:Array.from({length:maxF},(_,i)=>({name:`F${i+1}`, type:'text'})), rows});
+      }
+      model.losses.push('Componenti HL7, ripetizioni e datatype compositi sono semplificati in campi F1..Fn.');
+      return model;
+    }
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      const jsonFile = new File([text], file.name.replace(/\.[^.]+$/, '.json'), {type:'application/json'});
+      const m = await jsonToModel(jsonFile);
+      m.meta.source_format = 'FHIR_JSON';
+      m.sections.unshift({name:'Clinical_Message', items:[toTextParagraph('Risorsa clinica JSON/FHIR letta in modalità strutturata.')]});
+      m.losses.push('Profili, terminologie e riferimenti FHIR vengono appiattiti salvo estensioni dedicate.');
+      return m;
+    }
+    if (trimmed.startsWith('<')) {
+      const xmlFile = new File([text], file.name.replace(/\.[^.]+$/, '.xml'), {type:'application/xml'});
+      const m = await xmlToModel(xmlFile);
+      m.meta.source_format = 'FHIR_XML';
+      m.sections.unshift({name:'Clinical_Message', items:[toTextParagraph('Messaggio clinico XML/FHIR letto in modalità strutturata.')]});
+      m.losses.push('Profili, namespace e riferimenti clinici XML sono semplificati nel profilo XDL.');
+      return m;
+    }
+    model.sections.push({name:'Clinical_Message', items:[toTextParagraph(trimmed)]});
+    model.losses.push('Formato clinico non riconosciuto in modo specifico; contenuto trattato come testo.');
+    return model;
+  }
+
+  function modelToPlainJson(model){
+    return {
+      xdl_version:'1.0',
+      profile:model.profile,
+      name:model.name,
+      meta:model.meta,
+      sections:model.sections,
+      tables:model.tables,
+      workbook:model.workbook,
+      deck:model.deck,
+      losses:model.losses
+    };
+  }
+
+  function xmlEscape(s){ return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  function modelToXmlString(model){
+    const out = [];
+    const jsonPayload = JSON.stringify(modelToPlainJson(model));
+    out.push(`<?xml version="1.0" encoding="UTF-8"?>`);
+    out.push(`<xdl-document profile="${xmlEscape(model.profile || 'GENERIC')}" name="${xmlEscape(model.name || '')}">`);
+    out.push(`  <meta>`);
+    for (const [k,v] of Object.entries(model.meta || {})) out.push(`    <entry key="${xmlEscape(k)}">${xmlEscape(v)}</entry>`);
+    out.push(`  </meta>`);
+    out.push(`  <xdl-json>${xmlEscape(jsonPayload)}</xdl-json>`);
+
+    for (const sec of model.sections || []) {
+      out.push(`  <section name="${xmlEscape(sec.name)}">`);
+      for (const item of sec.items || []) out.push(`    <item kind="${xmlEscape(item.kind)}">${xmlEscape(item.text || '')}</item>`);
+      out.push(`  </section>`);
+    }
+
+    for (const tbl of model.tables || []) {
+      out.push(`  <table name="${xmlEscape(tbl.name)}">`);
+      out.push(`    <fields>`);
+      for (const f of tbl.fields || []) out.push(`      <field name="${xmlEscape(f.name)}" type="${xmlEscape(f.type || 'text')}" />`);
+      out.push(`    </fields>`);
+      out.push(`    <rows>`);
+      for (const row of tbl.rows || []) {
+        out.push(`      <row>`);
+        for (const [k,v] of Object.entries(row)) out.push(`        <cell key="${xmlEscape(k)}">${xmlEscape(v)}</cell>`);
+        out.push(`      </row>`);
+      }
+      out.push(`    </rows>`);
+      out.push(`  </table>`);
+    }
+
+    if (model.workbook?.sheets?.length) {
+      out.push(`  <workbook name="${xmlEscape(model.workbook.name || 'Workbook')}">`);
+      for (const sh of model.workbook.sheets) {
+        out.push(`    <sheet name="${xmlEscape(sh.name || 'Sheet1')}">`);
+        for (const cell of sh.cells || []) {
+          const ref = xmlEscape(cell.ref || 'A1');
+          const type = xmlEscape(cell.formula ? 'formula' : (cell.type || 'text'));
+          if (cell.formula) out.push(`      <cell ref="${ref}" type="${type}" formula="${xmlEscape(cell.formula)}"></cell>`);
+          else out.push(`      <cell ref="${ref}" type="${type}">${xmlEscape(cell.value ?? '')}</cell>`);
+        }
+        out.push(`    </sheet>`);
+      }
+      out.push(`  </workbook>`);
+    }
+
+    if (model.deck?.slides?.length) {
+      out.push(`  <deck name="${xmlEscape(model.deck.name || 'Presentation')}">`);
+      for (const slide of model.deck.slides) {
+        out.push(`    <slide name="${xmlEscape(slide.name || 'Slide')}" title="${xmlEscape(slide.title || '')}" subtitle="${xmlEscape(slide.subtitle || '')}">`);
+        for (const t of slide.texts || []) out.push(`      <text kind="${xmlEscape(t.kind || 'text')}">${xmlEscape(t.text || '')}</text>`);
+        if (slide.notes) out.push(`      <notes>${xmlEscape(slide.notes)}</notes>`);
+        out.push(`    </slide>`);
+      }
+      out.push(`  </deck>`);
+    }
+
+    out.push(`</xdl-document>`);
+    return out.join('\n');
+  }
+
+  async function modelToPdfBlob(model){
+    const jspdf = window.jspdf;
+    if (!jspdf) throw new Error('jsPDF non disponibile nel browser.');
+    const doc = new jspdf.jsPDF({unit:'pt', format:'a4'});
+    const isPdfDerived = String(model.meta?.source_format || '').toUpperCase() === 'PDF';
+    let y = 40;
+    const pageH = doc.internal.pageSize.getHeight();
+    const pageW = doc.internal.pageSize.getWidth();
+    const left = 40, right = 40, usable = pageW - left - right;
+    const ensure = (need=24) => { if (y + need > pageH - 40) { doc.addPage(); y = 40; } };
+
+    function writeParagraph(text, opts={}) {
+      const font = opts.font || 'helvetica';
+      const style = opts.style || 'normal';
+      const size = opts.size || 11;
+      const indent = opts.indent || 0;
+      const after = opts.after ?? 6;
+      const clean = String(text || '').replace(/^Pagina_\d+\s*/i, '').trim();
+      if (!clean) { y += after; return; }
+      doc.setFont(font, style); doc.setFontSize(size);
+      const lines = doc.splitTextToSize(clean, usable - indent);
+      ensure(lines.length * (size + 3) + after);
+      doc.text(lines, left + indent, y);
+      y += lines.length * (size + 3) + after;
+    }
+
+    if (!isPdfDerived) {
+      doc.setFont('helvetica','bold'); doc.setFontSize(18); doc.text(model.name || 'Documento XDL', left, y); y += 24;
+      doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.text(`Profilo: ${model.profile || 'GENERIC'}`, left, y); y += 18;
+    }
+
+    const pageLikeSections = [];
+    const normalSections = [];
+    for (const sec of model.sections || []) {
+      const pageLike = isPdfDerived && (sec.sourcePage || /^Pagina_\d+$/i.test(sec.name || ''));
+      if (pageLike) pageLikeSections.push(sec); else normalSections.push(sec);
+    }
+
+    if (isPdfDerived && pageLikeSections.length) {
+      pageLikeSections.forEach((sec, idx) => {
+        if (idx > 0) { doc.addPage(); y = 40; }
+        for (const item of sec.items || []) {
+          if (item.kind === 'HEADING') writeParagraph(item.text, {style:'bold', size:14, after:8});
+          else if (item.kind === 'PARAGRAPH') writeParagraph(item.text, {size:11, after:6});
+          else if (item.kind === 'LIST') {
+            for (const li of item.items || []) writeParagraph(li, {size:11, indent:10, after:4});
+          }
+        }
+      });
+      return doc.output('blob');
+    }
+
+    for (const sec of normalSections) {
+      if (sec.name) writeParagraph(sec.name, {style:'bold', size:14, after:8});
+      for (const item of sec.items || []) {
+        if (item.kind === 'HEADING') writeParagraph(item.text, {style:'bold', size:13, after:8});
+        else if (item.kind === 'PARAGRAPH') writeParagraph(item.text, {font:item.code ? 'courier':'helvetica', size:11, after:item.code ? 4 : 6});
+        else if (item.kind === 'LIST') {
+          for (const li of item.items || []) writeParagraph(li, {size:11, indent:10, after:4});
+        }
+      }
+      y += 4;
+    }
+    for (const tbl of model.tables || []) {
+      writeParagraph(tbl.name, {style:'bold', size:13, after:6});
+      const header = (tbl.fields || []).map(f=>f.name).join(' | ');
+      if (header) writeParagraph(header, {size:10, after:4});
+      for (const row of tbl.rows || []) {
+        const line = (tbl.fields || []).map(f => String(row[sanitizeIdentifier(f.name)] ?? row[f.name] ?? '')).join(' | ');
+        writeParagraph(line, {size:10, after:2});
+      }
+      y += 4;
+    }
+    if (model.workbook?.sheets?.length) {
+      for (const sh of model.workbook.sheets) {
+        writeParagraph(`Foglio: ${sh.name}`, {style:'bold', size:13, after:6});
+        const grid = sheetCellsToGrid(sh.cells || []);
+        for (const row of grid) writeParagraph(row.map(v => String(v ?? '')).join(' | '), {font:'courier', size:10, after:2});
+        y += 4;
+      }
+    }
+    if (model.deck?.slides?.length) {
+      for (const slide of model.deck.slides) {
+        writeParagraph(slide.title || slide.name, {style:'bold', size:13, after:6});
+        if (slide.subtitle) writeParagraph(slide.subtitle, {size:11, after:4});
+        for (const t of slide.texts || []) writeParagraph(t.text || '', {size:11, after:4});
+        if (slide.notes?.length) writeParagraph(slide.notes.join(' | '), {size:10, after:4});
+        y += 4;
+      }
+    }
+    return doc.output('blob');
+  }
+
+  async function modelToDatabaseBlob(model){
+    if (typeof initSqlJs !== 'function') throw new Error('sql.js non disponibile nel browser.');
+    const SQL = await initSqlJs({ locateFile: f => `https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/${f}` });
+    const db = new SQL.Database();
+    const tables = [];
+    const addTable = (name, fields, rows) => {
+      const safeName = sanitizeIdentifier(name, 'Table');
+      const cols = fields.map(f => `"${String(f.name).replace(/"/g,'""')}" TEXT`).join(', ');
+      db.run(`CREATE TABLE IF NOT EXISTS "${safeName}" (${cols || '"Value" TEXT'});`);
+      const colNames = (fields.length ? fields.map(f=>f.name) : ['Value']);
+      const placeholders = colNames.map(()=>'?').join(',');
+      const stmt = db.prepare(`INSERT INTO "${safeName}" (${colNames.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')}) VALUES (${placeholders})`);
+      for (const row of rows) stmt.run(colNames.map(c => row[c] ?? row[sanitizeIdentifier(c)] ?? ''));
+      stmt.free();
+      tables.push(safeName);
+    };
+    for (const tbl of model.tables || []) addTable(tbl.name, tbl.fields || [], tbl.rows || []);
+    if (model.workbook?.sheets?.length) {
+      for (const sh of model.workbook.sheets) {
+        const grid = sheetCellsToGrid(sh.cells || []);
+        const width = Math.max(0, ...grid.map(r => r.length));
+        const fields = Array.from({length:width}, (_,i)=>({name:`C${i+1}`}));
+        const rows = grid.map(r => Object.fromEntries(fields.map((f,i)=>[f.name, r[i] ?? ''])));
+        addTable(`sheet_${sh.name}`, fields, rows);
+      }
+    }
+    if (!tables.length) addTable('xdl_metadata', [{name:'Key'},{name:'Value'}], Object.entries(model.meta || {}).map(([k,v])=>({Key:k, Value:v})));
+    return new Blob([db.export()], {type:'application/octet-stream'});
+  }
+
+  function modelToClinicalText(model){
+    const lines = [];
+    const now = new Date();
+    const ts = now.toISOString().replace(/[-:TZ.]/g,'').slice(0,14);
+    lines.push(`MSH|^~\\&|XDLBRIDGE|LOCAL|TARGET|LOCAL|${ts}||ORU^R01|1|P|2.5`);
+    lines.push(`PID|1|||XDL-${sanitizeIdentifier(model.name || 'DOC')}||${(model.meta?.author || 'UNKNOWN').replace(/\|/g,' ')}`);
+    let obx = 1;
+    for (const sec of model.sections || []) {
+      for (const item of sec.items || []) lines.push(`OBX|${obx++}|TX|SECTION^${sec.name}||${String(item.text || '').replace(/\r?\n/g,' ').replace(/\|/g,'/')}`);
+    }
+    for (const tbl of model.tables || []) {
+      lines.push(`OBX|${obx++}|TX|TABLE^${tbl.name}||FIELDS:${(tbl.fields || []).map(f=>f.name).join(',')}`);
+      for (const row of (tbl.rows || []).slice(0,200)) {
+        const txt = (tbl.fields || []).map(f => `${f.name}=${row[f.name] ?? row[sanitizeIdentifier(f.name)] ?? ''}`).join('; ');
+        lines.push(`OBX|${obx++}|TX|ROW^${tbl.name}||${txt.replace(/\|/g,'/')}`);
+      }
+    }
+    return lines.join('\r');
+  }
+
+  async function excelToModel(file){
+    const name = inferDocumentName(file);
+    const model = makeEmptyModel('SPREADSHEET', name);
+    if (typeof XLSX === 'undefined') throw new Error('Libreria XLSX non caricata.');
+    const data = await readFileAsArrayBuffer(file);
+    const wb = XLSX.read(data, {type:'array', cellDates:true, cellFormula:true, dense:false});
+    const wantedSheet = sheetName.value.trim();
+    const sheetNames = wantedSheet ? [wantedSheet] : wb.SheetNames;
+    if (wantedSheet && !wb.SheetNames.includes(wantedSheet)) throw new Error(`Il foglio "${wantedSheet}" non esiste nel file Excel.`);
+    model.meta.source_format = 'SPREADSHEET';
+    model.meta.available_sheets = wb.SheetNames.join(', ');
+    model.workbook = { name, sheets: [] };
+    let sheetCount = 0;
+    for (const sName of sheetNames) {
+      const ws = wb.Sheets[sName]; if (!ws) continue;
+      const ref = rangeInput.value.trim() || ws['!ref'];
+      if (!ref) continue;
+      let decoded;
+      try { decoded = XLSX.utils.decode_range(ref); }
+      catch { throw new Error(`Intervallo Excel non valido: ${ref}`); }
+      const sh = { name: sName, cells: [] };
+      const rows = [];
+      for (let r = decoded.s.r; r <= decoded.e.r; r++) {
+        const rowObj = {};
+        let hasValues = false;
+        for (let c = decoded.s.c; c <= decoded.e.c; c++) {
+          const addr = XLSX.utils.encode_cell({r,c});
+          const cell = ws[addr];
+          if (!cell) continue;
+          hasValues = true;
+          if (cell.f) sh.cells.push({ref:addr, type:'formula', formula:cell.f.startsWith('=') ? cell.f.slice(1) : cell.f});
+          else sh.cells.push({ref:addr, type:cellType(cell.v), value:cell.v});
+          rowObj[`C${c - decoded.s.c + 1}`] = cell.v;
+        }
+        if (hasValues) rows.push(rowObj);
+      }
+      if (rows.length) {
+        const width = decoded.e.c - decoded.s.c + 1;
+        const fields = Array.from({length: width}, (_,i)=>({name:`C${i+1}`, type:'text'}));
+        model.tables.push({ name:`${sName}_Range`, fields, rows });
+      }
+      model.workbook.sheets.push(sh);
+      sheetCount++;
+    }
+    if (!sheetCount) throw new Error('Non sono riuscita a leggere dati utili dal file Excel o dall\'intervallo scelto.');
+    model.losses.push('Possibili stili, commenti, macro e formati condizionali non preservati.');
+    return model;
+  }
+
+  function parseXmlSafe(xml){
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(xml, 'application/xml');
+    const err = doc.getElementsByTagName('parsererror')[0];
+    if (err) throw new Error('XML interno DOCX non leggibile correttamente.');
+    return doc;
+  }
+
+  function htmlEntityDecode(s){
+    const ta = document.createElement('textarea');
+    ta.innerHTML = s || '';
+    return ta.value;
+  }
+
+  function getWordTextFromNode(node){
+    if (!node) return '';
+    const parts = [];
+    const walk = (n) => {
+      if (!n) return;
+      if (n.nodeType === 1) {
+        const ln = n.localName;
+        if (ln === 't') { parts.push(n.textContent || ''); return; }
+        if (ln === 'tab') { parts.push('\t'); return; }
+        if (ln === 'br' || ln === 'cr') { parts.push('\n'); return; }
+      }
+      for (const ch of Array.from(n.childNodes || [])) walk(ch);
+    };
+    walk(node);
+    return htmlEntityDecode(parts.join('')).replace(/\u00a0/g, ' ').replace(/[ \t]+\n/g, '\n').replace(/\n[ \t]+/g, '\n').replace(/[ \t]{2,}/g, ' ').trim();
+  }
+
+  async function docxToModel(file){
+    const name = inferDocumentName(file);
+    const model = makeEmptyModel('TEXT', name);
+    const zip = await JSZip.loadAsync(await readFileAsArrayBuffer(file));
+    const documentXml = await zip.file('word/document.xml')?.async('string');
+    if (!documentXml) throw new Error('Non trovo word/document.xml nel file DOCX.');
+
+    const xmlDoc = parseXmlSafe(documentXml);
+    const body = Array.from(xmlDoc.getElementsByTagNameNS('*', 'body'))[0] || xmlDoc.documentElement;
+    const bodyChildren = Array.from(body.childNodes || []).filter(n => n.nodeType === 1);
+
+    const bodyParagraphs = bodyChildren.filter(n => n.localName === 'p');
+    const fromPara = parsePositiveInt(wordFrom.value, 1);
+    const toPara = parsePositiveInt(wordTo.value, bodyParagraphs.length || 1);
+    if (fromPara > toPara) throw new Error(`Intervallo paragrafi Word non valido: ${fromPara}-${toPara}`);
+
+    const sec = { name:'Contenuto', items:[] };
+    let pIndex = 0;
+    let tCount = 1;
+
+    for (const node of bodyChildren) {
+      if (node.localName === 'p') {
+        pIndex += 1;
+        if (pIndex < fromPara || pIndex > toPara) continue;
+        const txt = getWordTextFromNode(node);
+        if (!txt) continue;
+        const pStyle = Array.from(node.getElementsByTagNameNS('*', 'pStyle'))[0];
+        const styleVal = pStyle ? (pStyle.getAttribute('w:val') || pStyle.getAttribute('val') || '') : '';
+        const headMatch = /Heading([1-6])/i.exec(styleVal);
+        const isHeading = headMatch || (/^(Titolo|Heading)/i.test(styleVal));
+        if (headMatch) sec.items.push({kind:'HEADING', id:`H${pIndex}`, level:Number(headMatch[1]), text:txt});
+        else if (isHeading) sec.items.push({kind:'HEADING', id:`H${pIndex}`, level:1, text:txt});
+        else sec.items.push({kind:'PARAGRAPH', id:`P${pIndex}`, text:txt});
+      }
+      else if (node.localName === 'tbl') {
+        const rowNodes = Array.from(node.getElementsByTagNameNS('*', 'tr'));
+        const rows = [];
+        let maxCols = 0;
+        for (const rowNode of rowNodes) {
+          const cellNodes = Array.from(rowNode.childNodes || []).filter(n => n.nodeType === 1 && n.localName === 'tc');
+          maxCols = Math.max(maxCols, cellNodes.length);
+          const row = {};
+          cellNodes.forEach((c, i) => {
+            row[`C${i+1}`] = getWordTextFromNode(c);
+          });
+          if (Object.values(row).some(v => String(v || '').trim().length)) rows.push(row);
+        }
+        if (rows.length) {
+          const fields = Array.from({length:maxCols}, (_,i)=>({name:`C${i+1}`, type:'text'}));
+          model.tables.push({name:`Tabella_${tCount}`, fields, rows});
+          tCount += 1;
+        }
+      }
+    }
+
+    model.meta.paragraph_range = `${fromPara}-${toPara}`;
+    if (sec.items.length) model.sections.push(sec);
+    model.losses.push('Impaginazione di pagina, note avanzate, immagini flottanti e dettagli tipografici possono essere semplificati.');
+    return model;
+  }
+
+  function extractPptTexts(xml){
+    const texts = [];
+    const re = /<a:t>([\s\S]*?)<\/a:t>/g; let m;
+    while ((m = re.exec(xml)) !== null) texts.push(m[1]);
+    return texts;
+  }
+
+  async function pptxToModel(file){
+    const name = inferDocumentName(file);
+    const model = makeEmptyModel('PRESENTATION', name);
+    const zip = await JSZip.loadAsync(await readFileAsArrayBuffer(file));
+    const slideNames = Object.keys(zip.files)
+      .filter(n => /^ppt\/slides\/slide\d+\.xml$/.test(n))
+      .sort((a,b)=> Number(a.match(/slide(\d+)/)[1]) - Number(b.match(/slide(\d+)/)[1]));
+    model.deck = { name, slides: [] };
+    const fromSlide = parsePositiveInt(pptFrom.value, 1);
+    const toSlide = parsePositiveInt(pptTo.value, slideNames.length || 1);
+    if (fromSlide > toSlide) throw new Error(`Intervallo slide PowerPoint non valido: ${fromSlide}-${toSlide}`);
+    let i = 1;
+    for (const slidePath of slideNames) {
+      if (i < fromSlide || i > toSlide) { i++; continue; }
+      const xml = await zip.file(slidePath).async('string');
+      const texts = extractPptTexts(xml).map(t=>t.trim()).filter(Boolean);
+      const slide = { name:`Slide_${i}`, title:'', subtitle:'', texts:[], notes:[] };
+      if (texts[0]) slide.title = texts[0];
+      if (texts[1]) slide.subtitle = texts[1];
+      texts.slice(2).forEach((t,idx)=> slide.texts.push({id:`T${i}_${idx+1}`, text:t}));
+      const notePath = `ppt/notesSlides/notesSlide${i}.xml`;
+      if (zip.file(notePath)) {
+        const noteXml = await zip.file(notePath).async('string');
+        const noteTexts = extractPptTexts(noteXml).map(t=>t.trim()).filter(Boolean);
+        slide.notes.push(...noteTexts);
+      }
+      model.deck.slides.push(slide);
+      i++;
+    }
+    model.meta.slide_range = `${fromSlide}-${toSlide}`;
+    model.losses.push('Layout preciso, animazioni, transizioni, temi e coordinate delle forme vengono semplificati.');
+    return model;
+  }
+
+  function modelToWorkbook(model){
+    const wb = XLSX.utils.book_new();
+    const targetSh = targetSheet.value.trim() || 'Importazione';
+    if (model.workbook?.sheets?.length) {
+      for (const sh of model.workbook.sheets) {
+        const ws = {};
+        let maxR = 0, maxC = 0;
+        for (const cell of sh.cells) {
+          const pos = XLSX.utils.decode_cell(cell.ref);
+          maxR = Math.max(maxR, pos.r); maxC = Math.max(maxC, pos.c);
+          if (cell.formula) ws[cell.ref] = { f: cell.formula };
+          else ws[cell.ref] = { v: cell.value, t: xlsxType(cell.value) };
+        }
+        if (!Object.keys(ws).length) continue;
+        ws['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0},e:{r:maxR,c:maxC}});
+        XLSX.utils.book_append_sheet(wb, ws, sh.name || targetSh);
+      }
+    } else if (model.tables?.length || model.sections?.length || model.deck?.slides?.length) {
+      const ws = XLSX.utils.aoa_to_sheet([]);
+      const start = normalizeCellRef(startCell.value.trim() || 'A1');
+      let row = XLSX.utils.decode_cell(start).r;
+      const col = XLSX.utils.decode_cell(start).c;
+
+      for (const sec of model.sections || []) {
+        XLSX.utils.sheet_add_aoa(ws, [[sec.name]], {origin:{r:row,c:col}}); row++;
+        for (const item of sec.items || []) {
+          XLSX.utils.sheet_add_aoa(ws, [[item.kind, item.text]], {origin:{r:row,c:col}}); row++;
+        }
+        row++;
+      }
+
+      for (const tbl of model.tables || []) {
+        const header = (tbl.fields || []).map(f => f.name);
+        XLSX.utils.sheet_add_aoa(ws, [[tbl.name]], {origin:{r:row,c:col}}); row++;
+        if (header.length) { XLSX.utils.sheet_add_aoa(ws, [header], {origin:{r:row,c:col}}); row++; }
+        for (const rObj of tbl.rows || []) {
+          const vals = header.map(h => rObj[sanitizeIdentifier(h)] ?? rObj[h] ?? '');
+          XLSX.utils.sheet_add_aoa(ws, [vals], {origin:{r:row,c:col}}); row++;
+        }
+        row++;
+      }
+
+      if (model.deck?.slides?.length) {
+        for (const slide of model.deck.slides) {
+          XLSX.utils.sheet_add_aoa(ws, [[slide.name, slide.title, slide.subtitle]], {origin:{r:row,c:col}}); row++;
+          for (const t of slide.texts || []) { XLSX.utils.sheet_add_aoa(ws, [[t.text]], {origin:{r:row,c:col+1}}); row++; }
+          row++;
+        }
+      }
+
+      XLSX.utils.book_append_sheet(wb, ws, targetSh);
+    } else {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['XDL vuoto']]), targetSh);
+    }
+    return wb;
+  }
+
+  function xlsxType(v){
+    if (typeof v === 'number') return 'n';
+    if (typeof v === 'boolean') return 'b';
+    return 's';
+  }
+
+  async function modelToDocx(model){
+    const { Document, Packer, Paragraph, HeadingLevel, Table, TableRow, TableCell, TextRun, WidthType } = docx;
+    const isPdfDerived = String(model.meta?.source_format || '').toUpperCase() === 'PDF';
+
+    function pushSectionContent(children, sec, includeName){
+      const showName = includeName && sec.name && !(isPdfDerived && /^Pagina_\d+$/i.test(sec.name));
+      if (showName) children.push(new Paragraph({ text: sec.name, heading: HeadingLevel.HEADING_1 }));
+      for (const item of sec.items || []) {
+        if (item.kind === 'HEADING') children.push(new Paragraph({ text: item.text, heading: mapHeading(item.level) }));
+        else if (item.kind === 'PARAGRAPH') {
+          const text = String(item.text || '').replace(/\s+$/g, '');
+          if (!text || (isPdfDerived && /^Pagina_\d+$/i.test(text))) continue;
+          const runs = text.split(/\n/).map((line, idx, arr) => new TextRun({ text: line, break: idx < arr.length - 1 ? 1 : 0, font: item.code ? 'Courier New' : undefined }));
+          children.push(new Paragraph({ children: runs, spacing: { after: item.code ? 80 : 140 } }));
+        }
+        else if (item.kind === 'LIST') {
+          for (const li of item.items || []) children.push(new Paragraph({ text: li, bullet:{level:0} }));
+        }
+        else if (item.kind === 'TABLE') {
+          const header = (item.fields || []).map(f => f.name);
+          const rows = [];
+          if (header.length) rows.push(new TableRow({ children: header.map(h => new TableCell({ children:[new Paragraph(String(h))] })) }));
+          for (const row of item.rows || []) rows.push(new TableRow({ children: header.map(h => new TableCell({ children:[new Paragraph(String(row[sanitizeIdentifier(h)] ?? row[h] ?? ''))] })) }));
+          if (rows.length) children.push(new Table({ width:{size:100,type:WidthType.PERCENTAGE}, rows }));
+          children.push(new Paragraph(''));
+        }
+      }
+    }
+
+    const docSections = [];
+    const normalChildren = [];
+    const pageLikeSections = [];
+
+    for (const sec of (model.sections || [])) {
+      const pageLikeSection = isPdfDerived && (sec.sourcePage || /^Pagina_\d+$/i.test(sec.name || ''));
+      if (pageLikeSection) pageLikeSections.push(sec);
+      else pushSectionContent(normalChildren, sec, true);
+    }
+
+    for (const tbl of model.tables || []) {
+      normalChildren.push(new Paragraph({ text: tbl.name, heading: HeadingLevel.HEADING_2 }));
+      const header = (tbl.fields || []).map(f => f.name);
+      const rows = [];
+      if (header.length) rows.push(new TableRow({ children: header.map(h => new TableCell({ children:[new Paragraph(String(h))] })) }));
+      for (const row of tbl.rows || []) rows.push(new TableRow({ children: header.map(h => new TableCell({ children:[new Paragraph(String(row[sanitizeIdentifier(h)] ?? row[h] ?? ''))] })) }));
+      normalChildren.push(new Table({ width:{size:100,type:WidthType.PERCENTAGE}, rows }));
+      normalChildren.push(new Paragraph(''));
+    }
+
+    if (model.workbook?.sheets?.length) {
+      for (const sh of model.workbook.sheets) {
+        normalChildren.push(new Paragraph({ text: `Foglio: ${sh.name}`, heading: HeadingLevel.HEADING_2 }));
+        const grid = sheetCellsToGrid(sh.cells || []);
+        const rows = grid.map(r => new TableRow({ children:r.map(v => new TableCell({ children:[new Paragraph(String(v ?? ''))] })) }));
+        if (rows.length) normalChildren.push(new Table({ width:{size:100,type:WidthType.PERCENTAGE}, rows }));
+        normalChildren.push(new Paragraph(''));
+      }
+    }
+
+    if (model.deck?.slides?.length) {
+      for (const slide of model.deck.slides) {
+        normalChildren.push(new Paragraph({ text: slide.title || slide.name, heading: HeadingLevel.HEADING_2 }));
+        if (slide.subtitle) normalChildren.push(new Paragraph(slide.subtitle));
+        for (const t of slide.texts || []) normalChildren.push(new Paragraph(t.text));
+        if (slide.notes?.length) {
+          normalChildren.push(new Paragraph({ text:'Note', heading: HeadingLevel.HEADING_3 }));
+          for (const n of slide.notes) normalChildren.push(new Paragraph(n));
+        }
+        normalChildren.push(new Paragraph(''));
+      }
+    }
+
+    if (normalChildren.length) docSections.push({ children: normalChildren });
+
+    if (pageLikeSections.length) {
+      for (const sec of pageLikeSections) {
+        const children = [];
+        pushSectionContent(children, sec, false);
+        if (!children.length) children.push(new Paragraph(''));
+        docSections.push({ children });
+      }
+    }
+
+    if (!docSections.length) docSections.push({ children:[new Paragraph('Documento vuoto')] });
+
+    const docFile = new Document({ sections: docSections });
+    return await Packer.toBlob(docFile);
+  }
+
+  function mapHeading(level){
+    const H = docx.HeadingLevel;
+    return [H.HEADING_1,H.HEADING_2,H.HEADING_3,H.HEADING_4,H.HEADING_5,H.HEADING_6][Math.max(0, Math.min(5,(level||1)-1))];
+  }
+
+  function sheetCellsToGrid(cells){
+    if (!cells.length) return [];
+    let maxR = 0, maxC = 0;
+    for (const cell of cells) {
+      const pos = XLSX.utils.decode_cell(cell.ref);
+      maxR = Math.max(maxR, pos.r); maxC = Math.max(maxC, pos.c);
+    }
+    const grid = Array.from({length:maxR+1}, ()=>Array(maxC+1).fill(''));
+    for (const cell of cells) {
+      const pos = XLSX.utils.decode_cell(cell.ref);
+      grid[pos.r][pos.c] = cell.formula ? '=' + cell.formula : (cell.value ?? '');
+    }
+    return grid;
+  }
+
+  async function modelToPptx(model){
+    const pptx = new PptxGenJS();
+    pptx.layout = 'LAYOUT_WIDE';
+    pptx.author = model.meta?.author || '';
+    pptx.subject = model.name || 'XDL Bridge';
+    pptx.title = model.name || 'Documento XDL';
+    pptx.lang = model.meta?.language || 'it-IT';
+
+    if (model.deck?.slides?.length) {
+      for (const s of model.deck.slides) {
+        const slide = pptx.addSlide();
+        slide.addText(s.title || s.name, {x:0.4,y:0.3,w:12,h:0.5,fontSize:24,bold:true});
+        if (s.subtitle) slide.addText(s.subtitle, {x:0.45,y:0.9,w:11.5,h:0.4,fontSize:14,color:'555555'});
+        let y = 1.4;
+        for (const t of s.texts || []) {
+          slide.addText(t.text, {x:0.6,y,w:12,h:0.45,fontSize:18});
+          y += 0.45;
+          if (y > 6.5) { y = 1.4; }
+        }
+      }
+    } else {
+      const slide = pptx.addSlide();
+      slide.addText(model.name || 'Documento XDL', {x:0.4,y:0.3,w:12,h:0.5,fontSize:24,bold:true});
+      let y = 1.0;
+      for (const sec of model.sections || []) {
+        slide.addText(sec.name, {x:0.5,y,w:12,h:0.35,fontSize:20,bold:true}); y += 0.4;
+        for (const item of sec.items || []) {
+          slide.addText(item.text, {x:0.8,y,w:11.2,h:0.35,fontSize:item.kind==='HEADING'?18:14,bold:item.kind==='HEADING'});
+          y += 0.35;
+          if (y > 6.8) { y = 1.0; }
+        }
+      }
+      for (const tbl of model.tables || []) {
+        const slideTbl = pptx.addSlide();
+        slideTbl.addText(tbl.name, {x:0.4,y:0.3,w:12,h:0.5,fontSize:22,bold:true});
+        const header = (tbl.fields || []).map(f => ({text:f.name, options:{bold:true}}));
+        const body = (tbl.rows || []).map(r => (tbl.fields || []).map(f => String(r[sanitizeIdentifier(f.name)] ?? r[f.name] ?? '')));
+        const data = header.length ? [[...header], ...body] : body;
+        if (data.length) slideTbl.addTable(data, {x:0.4,y:1.0,w:12.0,h:5.6,fontSize:12,border:{type:'solid',pt:1,color:'CFCFCF'}});
+      }
+      if (model.workbook?.sheets?.length) {
+        for (const sh of model.workbook.sheets) {
+          const slideSh = pptx.addSlide();
+          slideSh.addText(`Foglio: ${sh.name}`, {x:0.4,y:0.3,w:12,h:0.5,fontSize:22,bold:true});
+          const grid = sheetCellsToGrid(sh.cells || []).slice(0,15).map(r => r.slice(0,8).map(v => String(v ?? '')));
+          if (grid.length) slideSh.addTable(grid, {x:0.4,y:1.0,w:12.0,h:5.6,fontSize:11,border:{type:'solid',pt:1,color:'D9D9D9'}});
+        }
+      }
+    }
+    return pptx;
+  }
+
+  function normalizeCellRef(ref){
+    return /^[A-Z]+\d+$/i.test(ref) ? ref.toUpperCase() : 'A1';
+  }
+
+  function downloadBlob(blob, filename){
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    setTimeout(()=>URL.revokeObjectURL(url), 1500);
+  }
+
+  function updateTargetUi(){
+    const isExcel = targetType.value === 'xlsx';
+    targetSheetWrap.style.display = isExcel ? 'flex' : 'none';
+    startCellWrap.style.display = isExcel ? 'flex' : 'none';
+  }
+
+  function updateSourceVisibility(){
+    const file = sourceFile.files[0] || selectedSourceFile;
+    const forced = sourceType.value;
+    const detected = file ? detectType(file) : 'unknown';
+    const resolved = forced !== 'auto' ? forced : detected;
+    document.querySelectorAll('.source-only').forEach(el => { el.style.display = 'none'; });
+    sheetNameWrap.style.display = 'none';
+    rangeInputWrap.style.display = 'none';
+    if (resolved === 'spreadsheet') {
+      sheetNameWrap.style.display = 'flex';
+      rangeInputWrap.style.display = 'flex';
+    }
+    if (resolved && resolved !== 'unknown') {
+      document.querySelectorAll('.source-' + resolved).forEach(el => { el.style.display = 'flex'; });
+    }
+    if (!file) {
+      sourceInfo.textContent = 'Nessun file sorgente selezionato.';
+    } else {
+      const label = {
+        spreadsheet:'Excel / foglio elettronico', text:'Word / documento testuale', presentation:'PowerPoint / presentazione',
+        xdl:'XDL', json:'JSON', xml:'XML', pdf:'PDF', database:'Database / SQLite / SQL', clinical:'Messaggi clinici', unknown:'non riconosciuto'
+      }[resolved] || resolved;
+      sourceInfo.textContent = `File: ${file.name} — tipo rilevato: ${label}.` + (resolved==='spreadsheet' ? ' Puoi indicare foglio e intervallo prima di generare l\'XDL.' : '');
+    }
+  }
+
+  async function getModelForExport(){
+    const file = xdlImportFile.files[0];
+    if (file) {
+      const text = await readFileAsText(file);
+      xdlOutput.value = text;
+      const model = parseXdlLoose(text);
+      currentModel = model;
+      summarizeModel(model);
+      setLeft(`File XDL caricato dalla seconda parte: ${file.name}`);
+      return model;
+    }
+    const text = xdlOutput.value.trim();
+    if (text) {
+      const model = parseXdlLoose(text);
+      currentModel = model;
+      summarizeModel(model);
+      return model;
+    }
+    if (currentModel) return currentModel;
+    throw new Error('Carica un file XDL nella seconda parte oppure incolla/genera un testo XDL valido.');
+  }
+
+  async function generateModelFromInput(){
+    const file = sourceFile.files[0] || selectedSourceFile;
+    if (!file) throw new Error('Carica prima un file sorgente.');
+    const forced = sourceType.value;
+    const kind = forced !== 'auto' ? forced : detectType(file);
+    if (kind === 'xdl') {
+      const text = await readFileAsText(file);
+      xdlOutput.value = text;
+      const model = parseXdlLoose(text);
+      currentModel = model;
+      summarizeModel(model);
+      setLeft('File XDL letto correttamente e modello interno ricostruito.');
+      return model;
+    }
+    let model;
+    if (kind === 'spreadsheet') {
+      if (typeof XLSX === 'undefined') throw new Error('Libreria Excel non disponibile nel browser.');
+      model = await excelToModel(file);
+    }
+    else if (kind === 'text') model = await docxToModel(file);
+    else if (kind === 'presentation') model = await pptxToModel(file);
+    else if (kind === 'json') model = await jsonToModel(file);
+    else if (kind === 'xml') model = await xmlToModel(file);
+    else if (kind === 'pdf') model = await pdfToModel(file);
+    else if (kind === 'database') model = await databaseToModel(file);
+    else if (kind === 'clinical') model = await clinicalToModel(file);
+    else throw new Error('Tipo sorgente non riconosciuto.');
+    xdlOutput.value = modelToXdl(model);
+    currentModel = model;
+    summarizeModel(model);
+    const extra = model.profile === 'SPREADSHEET' && model.meta?.available_sheets ? ` Fogli disponibili: ${model.meta.available_sheets}.` : '';
+    setLeft(`XDL generato da ${file.name}. Profilo rilevato: ${model.profile}.` + extra);
+    return model;
+  }
+
+  $('analyzeBtn').addEventListener('click', async () => {
+    try { await generateModelFromInput(); }
+    catch (err) { setLeft('Errore: ' + err.message); }
+  });
+
+  $('saveXdlLeftBtn').addEventListener('click', () => {
+    try {
+      const text = xdlOutput.value.trim();
+      if (!text) throw new Error('Non c\'è nessun XDL da salvare.');
+      const blob = new Blob([text], {type:'text/plain;charset=utf-8'});
+      const name = docName.value.trim() || baseName.value.trim() || 'documento_xdl';
+      downloadBlob(blob, `${name}.xdl`);
+      setLeft('File XDL salvato con successo dalla prima parte.');
+    } catch (err) { setLeft('Errore: ' + err.message); }
+  });
+
+  $('loadXdlBtn').addEventListener('click', () => {
+    try {
+      const text = xdlOutput.value.trim();
+      if (!text) throw new Error('Il riquadro XDL è vuoto.');
+      const model = parseXdlLoose(text);
+      currentModel = model;
+      summarizeModel(model);
+      setLeft('Testo XDL caricato dal riquadro e convertito nel modello interno.');
+    } catch (err) { setLeft('Errore nel parsing XDL: ' + err.message); }
+  });
+
+  $('saveXdlBtn').addEventListener('click', () => {
+    try {
+      const text = xdlOutput.value.trim();
+      if (!text) throw new Error('Non c\'è nessun XDL da salvare.');
+      const blob = new Blob([text], {type:'text/plain;charset=utf-8'});
+      downloadBlob(blob, `${baseName.value.trim() || 'output_xdl_bridge'}.xdl`);
+      setRight('File XDL salvato con successo.');
+    } catch (err) { setRight('Errore: ' + err.message); }
+  });
+
+  $('exportBtn').addEventListener('click', async () => {
+    try {
+      let model = await getModelForExport();
+      const outBase = baseName.value.trim() || 'output_xdl_bridge';
+      const mode = modeSelect.value;
+      const notes = [];
+      if (mode === 'content') notes.push('Modalità contenuto: priorità al testo e ai dati.');
+      if (mode === 'structure') notes.push('Modalità struttura: priorità alla gerarchia degli oggetti.');
+      if (mode === 'balanced') notes.push('Modalità bilanciata: compromesso tra contenuto e struttura.');
+
+      if (targetType.value === 'xdl') {
+        const blob = new Blob([xdlOutput.value], {type:'text/plain;charset=utf-8'});
+        downloadBlob(blob, `${outBase}.xdl`);
+        setRight('Esportazione completata in XDL.');
+        return;
+      }
+
+      if (targetType.value === 'xlsx') {
+        const wb = modelToWorkbook(model);
+        XLSX.writeFile(wb, `${outBase}.xlsx`);
+        setRight('Esportazione completata in Excel. ' + notes.join(' '));
+        return;
+      }
+
+      if (targetType.value === 'docx') {
+        const blob = await modelToDocx(model);
+        downloadBlob(blob, `${outBase}.docx`);
+        setRight('Esportazione completata in Word. Alcuni aspetti nativi vengono semplificati. ' + notes.join(' '));
+        return;
+      }
+
+      if (targetType.value === 'pptx') {
+        const pptx = await modelToPptx(model);
+        await pptx.writeFile({ fileName: `${outBase}.pptx` });
+        setRight('Esportazione completata in PowerPoint. Layout, animazioni e temi possono essere semplificati. ' + notes.join(' '));
+        return;
+      }
+
+      if (targetType.value === 'pdf') {
+        const blob = await modelToPdfBlob(model);
+        downloadBlob(blob, `${outBase}.pdf`);
+        setRight('Esportazione completata in PDF. La resa privilegia contenuto e struttura testuale/tabellare. ' + notes.join(' '));
+        return;
+      }
+
+      if (targetType.value === 'json') {
+        const blob = new Blob([JSON.stringify(modelToPlainJson(model), null, 2)], {type:'application/json;charset=utf-8'});
+        downloadBlob(blob, `${outBase}.json`);
+        setRight('Esportazione completata in JSON. ' + notes.join(' '));
+        return;
+      }
+
+      if (targetType.value === 'xml') {
+        const blob = new Blob([modelToXmlString(model)], {type:'application/xml;charset=utf-8'});
+        downloadBlob(blob, `${outBase}.xml`);
+        setRight('Esportazione completata in XML. ' + notes.join(' '));
+        return;
+      }
+
+      if (targetType.value === 'database') {
+        const blob = await modelToDatabaseBlob(model);
+        downloadBlob(blob, `${outBase}.sqlite`);
+        setRight('Esportazione completata in database SQLite. Vincoli avanzati e trigger non sono inclusi automaticamente. ' + notes.join(' '));
+        return;
+      }
+
+      if (targetType.value === 'clinical') {
+        const blob = new Blob([modelToClinicalText(model)], {type:'text/plain;charset=utf-8'});
+        downloadBlob(blob, `${outBase}.hl7`);
+        setRight('Esportazione completata in messaggio clinico HL7 v2 semplificato. ' + notes.join(' '));
+        return;
+      }
+
+      throw new Error('Formato di destinazione non supportato.');
+    } catch (err) {
+      setRight('Errore durante l\'esportazione: ' + err.message);
+    }
+  });
+
+  $('targetType').addEventListener('change', updateTargetUi);
+  sourceType.addEventListener('change', updateSourceVisibility);
+  sourceFile.addEventListener('change', () => {
+    selectedSourceFile = sourceFile.files[0] || null;
+    updateSourceVisibility();
+  });
+  xdlImportFile.addEventListener('change', async () => {
+    try {
+      const file = xdlImportFile.files[0];
+      if (!file) return;
+      const text = await readFileAsText(file);
+      xdlOutput.value = text;
+      const model = parseXdlLoose(text);
+      currentModel = model;
+      summarizeModel(model);
+      setRight(`File XDL pronto per la ricostruzione: ${file.name}`);
+    } catch (err) {
+      setRight('Errore nel caricamento del file XDL: ' + err.message);
+    }
+  });
+
+  updateTargetUi();
+  updateSourceVisibility();
+
+  $('clearBtn').addEventListener('click', () => {
+    sourceFile.value = '';
+    xdlImportFile.value = '';
+    xdlOutput.value = '';
+    currentModel = null;
+    selectedSourceFile = null;
+    setLeft('Interfaccia pulita.');
+    setRight('Nessuna esportazione eseguita.');
+    modelSummary.textContent = 'Nessun modello XDL disponibile.';
+  });
+})();
+</script>
+</body>
+</html>
